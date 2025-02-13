@@ -10,9 +10,11 @@ use crate::{BeaconConsensusEngineEvent, BeaconConsensusEngineHandle, EthApiBuild
 use alloy_rpc_types::engine::ClientVersionV1;
 use futures::TryFutureExt;
 use reth_chainspec::EthereumHardforks;
+use reth_engine_local::LocalPayloadAttributesBuilder;
 use reth_node_api::{
     AddOnsContext, BlockTy, EngineTypes, EngineValidator, ExecutionData, FullNodeComponents,
-    NodeAddOns, NodeTypes, NodeTypesWithEngine,
+    FullNodeTypes, NodeAddOns, NodeTypes, NodeTypesWithEngine, PayloadAttributesBuilder,
+    PayloadTypes,
 };
 use reth_node_core::{
     node_config::NodeConfig,
@@ -610,6 +612,46 @@ where
 
     async fn engine_validator(&self, ctx: &AddOnsContext<'_, N>) -> eyre::Result<Self::Validator> {
         self.engine_validator_builder.clone().build(ctx).await
+    }
+}
+
+/// Helper trait to provide [`PayloadAttributesBuilder`] on-demand.
+pub trait PayloadAttributesBuilderAddOn<Node: FullNodeComponents>: Send {
+    #[expect(clippy::type_complexity)]
+    fn payload_attributes_builder(
+        &self,
+        ctx: &AddOnsContext<'_, Node>,
+    ) -> eyre::Result<
+        Box<
+            dyn PayloadAttributesBuilder<
+                <<Node::Types as NodeTypesWithEngine>::Engine as PayloadTypes>::PayloadAttributes,
+            >,
+        >,
+    >;
+}
+
+impl<N, EthApi, EV> PayloadAttributesBuilderAddOn<N> for RpcAddOns<N, EthApi, EV>
+where
+    N: FullNodeComponents,
+    EthApi: EthApiTypes,
+    EV: EngineValidatorBuilder<N>,
+    <<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec: EthereumHardforks,
+    LocalPayloadAttributesBuilder<<<N as FullNodeTypes>::Types as NodeTypes>::ChainSpec>:
+        PayloadAttributesBuilder<
+            <<N::Types as NodeTypesWithEngine>::Engine as PayloadTypes>::PayloadAttributes,
+        >,
+{
+    fn payload_attributes_builder(
+        &self,
+        ctx: &AddOnsContext<'_, N>,
+    ) -> eyre::Result<
+        Box<
+            dyn PayloadAttributesBuilder<
+                <<N::Types as NodeTypesWithEngine>::Engine as PayloadTypes>::PayloadAttributes,
+            >,
+        >,
+    > {
+        Ok(Box::new(LocalPayloadAttributesBuilder::new(ctx.config.chain.clone())))
     }
 }
 

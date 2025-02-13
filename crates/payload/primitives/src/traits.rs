@@ -126,3 +126,9 @@ pub trait PayloadAttributesBuilder<Attributes>: Send + Sync + 'static {
     /// Return a new payload attribute from the builder.
     fn build(&self, timestamp: u64) -> Attributes;
 }
+
+impl<T: 'static> PayloadAttributesBuilder<T> for Box<dyn PayloadAttributesBuilder<T>> {
+    fn build(&self, timestamp: u64) -> T {
+        (**self).build(timestamp)
+    }
+}
